@@ -3,7 +3,11 @@ package main
 import (
 	"fmt"
 	"github.com/codegangsta/cli"
+	"net/http"
 	"os"
+	"time"
+	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -52,4 +56,49 @@ func gbAction(c *cli.Context) {
 	fmt.Printf("%d, %d\n", requests, concurrency)
 
 	fmt.Printf("Hello world! %s\n", paramFirst)
+
+	const (
+		N = 400 // 全体数
+		M = 200 // 1秒あたりの処理制限
+	)
+
+	cc := make(chan int, 1000)
+	go func() {
+		ctx := context.Background()
+		n := rate.Every(time.Second/M)
+		l := rate.NewLimiter(n, M)
+		for i := 0; i < N; i++ {
+			if err := l.Wait(ctx); err != nil {
+				fmt.Errorf("fatal; %s", err)
+			}
+			go get("https://maitto-app.appspot.com/")
+			cc <- i
+		}
+		close(cc)
+	}()
+	for n := range cc {
+		fmt.Println(n)
+	}
+}
+
+func get(url string) Result {
+	req, _ := http.NewRequest("GET", url, nil)
+
+	client := new(http.Client)
+	resp, _ := client.Do(req)
+	defer resp.Body.Close()
+
+	//byteArray, _ := ioutil.ReadAll(resp.Body)
+	//fmt.Println(string(byteArray))
+	status := resp.StatusCode
+	fmt.Printf("status : %d\n", status)
+
+	return Result{
+		Status: status,
+	}
+
+}
+
+type Result struct {
+	Status int
 }
